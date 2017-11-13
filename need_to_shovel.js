@@ -81,9 +81,9 @@ function getPrecipationData(context, cb) {
     darkSkyToday.initialize(position).loadTime(moment().tz(TZ).startOf('day')),
   ]).then(([yesterday, today, forecast]) => {
       
-      // We're interested in snowfall between yesterday 10pm and today 8am
-      var yesterdayEvening = moment().tz(TZ).subtract(1, 'days').hours(21).minutes(0).seconds(0).milliseconds(0);
-      var todayMorning = moment().tz(TZ).hours(22).minutes(0).seconds(0);
+      // We're interested in snowfall between yesterday's evening and today's morning
+      var yesterdayEvening = moment().tz(TZ).subtract(1, 'days').startOf('day').hours(21);
+      var todayMorning = moment().tz(TZ).startOf('day').hours(8);
 
       // Map DarkSky data into array of time/snowlevel tuples for relevant timespan 
       var snowArray = yesterday.hourly.data.concat(today.hourly.data).map( 
