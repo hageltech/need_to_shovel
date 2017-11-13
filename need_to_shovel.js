@@ -13,7 +13,7 @@ const MINIMUM_SNOW_0600 = 20;
 const MINIMUM_SNOW_0630 = 5;
 
 // **************************************************************************************
-// Sends persistent notification to PushOver service, if snow precipation is above 
+// Sends persistent notification to PushOver service, if snow precipitation is above 
 // pre-set values (see above). Need to wake up earlier to shovel...
 // There are 3 pre-set snow levels (in cm): one to get up at 5am, one for 5:30 and one for 6am
 // TODO: Extract whole time/snow-level logic into an external configuration file.
@@ -28,7 +28,7 @@ function pushNotificationIfNeeded(context, cb, snowLevel) {
       (now.isAfter(time0600) && (snowLevel > MINIMUM_SNOW_0600)) ||
       (now.isAfter(time0630) && (snowLevel > MINIMUM_SNOW_0630))) {
       
-    var p = new Pushover({
+    const p = new Pushover({
     	user: context.secrets.pushover_user,
 	    token: context.secrets.pushover_token,
 	    onerror: function(error) { cb(error) },
@@ -36,8 +36,8 @@ function pushNotificationIfNeeded(context, cb, snowLevel) {
     
     // Pushover message: priority is 2, so it's persistent, Alarm-stream message on android
     // that has to be manually cancelled (just like alarm clock)
-    var msg = {
-    	message: 'Time to wake up, there is over ' + snowLevel + 'cm of snow outside!',
+    const msg = {
+    	message: 'Time to wake up, there is over ' + snowLevel.toFixed(1) + 'cm of snow outside!',
     	title: 'Time to Shovel!',
     	sound: 'persistent',
     	retry: 60,
@@ -48,27 +48,28 @@ function pushNotificationIfNeeded(context, cb, snowLevel) {
     // Send message to pushover
     p.send(msg, function(err, result) {
     	if (err) {
-    	  console.log("Cannot send pushover notification: ", err);
-    		cb(err);
+    	  console.log('Cannot send pushover notification: ', err);
+ 	  cb(err);
     	}
-  	  console.log("Sent pushover notification: ", result);
-  	  // Store current time so no more messages will be sent today
-  	  context.storage.set( { lastMessageSent: moment().tz(TZ).format("YYYY-MM-DD") }, function (error) {
-          if (error) return cb(error);
-      });
-  	  return true;
+        console.log('Sent pushover notification: ', result);
+        // Store current time so no more messages will be sent today
+        context.storage.set( { lastMessageSent: moment().tz(TZ).format('YYYY-MM-DD') }, function (error) {
+            if (error) return cb(error);
+        });
     });
-  }
-  return false;  
+    return true;
+  } else {
+    return false; 
+  }	  
 }
 
 
 // **************************************************************************************
-// Get snow precipation levels from DarkSky, and calculate accumulated level  
+// Get snow precipitation levels from DarkSky, and calculate accumulated level  
 // between yesterday 10pm and today 8am
-function getPrecipationData(context, cb) {
-    // Geographic position for precipation data
-  var position = {
+function getPrecipitationData(context, cb) {
+  // Geographic position for precipitation data
+  const position = {
     latitude: context.secrets.latitude, 
     longitude: context.secrets.longitude
   };
@@ -82,35 +83,35 @@ function getPrecipationData(context, cb) {
   ]).then(([yesterday, today, forecast]) => {
       
       // We're interested in snowfall between yesterday's evening and today's morning
-      var yesterdayEvening = moment().tz(TZ).subtract(1, 'days').startOf('day').hours(21);
-      var todayMorning = moment().tz(TZ).startOf('day').hours(8);
+      const yesterdayEvening = moment().tz(TZ).subtract(1, 'days').startOf('day').hours(21);
+      const todayMorning = moment().tz(TZ).startOf('day').hours(8);
 
       // Map DarkSky data into array of time/snowlevel tuples for relevant timespan 
-      var snowArray = yesterday.hourly.data.concat(today.hourly.data).map( 
+      const snowArray = yesterday.hourly.data.concat(today.hourly.data).map( 
           function(x) {
-            return { time: moment(x.time, "X").tz(TZ), snow: x.precipAccumulation || 0 }        
+            return { time: moment(x.time, 'X').tz(TZ), snow: x.precipAccumulation || 0 }        
           }).filter( 
           function(x) { 
-            return x.time.isBetween(yesterdayEvening.utc(), todayMorning.utc()) }
+            return x.time.isBetween(yesterdayEvening, todayMorning) }
           );
 
       // Calculate the total snow level for the time period (in centimeters)
-      var snowTotal = snowArray.reduce( function(sum, val) { return sum + val.snow }, 0);
+      const snowTotal = snowArray.reduce( function(sum, val) { return sum + val.snow }, 0);
       
       if (DEBUG_LEVEL > 2) {
-        console.log("Snow levels: ", snowArray.map( function(x) { return { time: x.time.format(), snow: x.snow }}));  
+        console.log('Snow levels: ', snowArray.map( function(x) { return { time: x.time.format('ddd hh:mm z'), snow: x.snow }}));  
       }
       if (DEBUG_LEVEL > 1) {
-        console.log("Total snow level: ", snowTotal);
+        console.log('Total snow level: ', snowTotal);
       }
       if (pushNotificationIfNeeded(context, cb, snowTotal)) {
-        cb(null, "Snow level is " + snowTotal + "cm, message has been sent!");
+        cb(null, 'Snow level is ' + snowTotal.toFixed(1) + 'cm, message has been sent!');
       } else {
-        cb(null, "Snow level is " + snowTotal + "cm, no need to shovel!");
+        cb(null, 'Snow level is ' + snowTotal.toFixed(1) + 'cm, no need to shovel!');
       }
     }
   ).catch(err => {
-      console.log("Error: ", err);
+      console.log('Error: ', err);
       cb(err);
   });
 }
@@ -124,11 +125,11 @@ module.exports = function(context, cb) {
   // Get time when last message was sent
   context.storage.get(function (error, data) {
         if (error) return cb(error);
-        if (data && (data.lastMessageSent == moment().tz(TZ).format("YYYY-MM-DD"))) {
-          console.log("Message was already sent today, exiting.");
-          cb(null, "Message was already sent today!");
+        if (data && (data.lastMessageSent == moment().tz(TZ).format('YYYY-MM-DD'))) {
+          console.log('Message was already sent today, exiting.');
+          cb(null, 'Message was already sent today!');
         } else {
-          getPrecipationData(context, cb);
+          getPrecipitationData(context, cb);
         }
     });  
 
